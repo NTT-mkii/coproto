@@ -129,17 +129,16 @@ if(COPROTO_ENABLE_BOOST)
 
         option(Boost_USE_MULTITHREADED "mt boost" ON)
         option(Boost_USE_STATIC_LIBS "static boost" ON)
+        option(Boost_USE_DEBUG_RUNTIME "boost debug runtime" ON)
 
+        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+            set(Boost_USE_DEBUG_RUNTIME ON)
+        else()
+            set(Boost_USE_DEBUG_RUNTIME OFF)
+        endif()
 
         if(MSVC)
-            if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-                option(Boost_USE_DEBUG_RUNTIME "boost debug runtime" ON)
-            else()
-                option(Boost_USE_DEBUG_RUNTIME "boost debug runtime" OFF)
-            endif()
             option(Boost_LIB_PREFIX "Boost_LIB_PREFIX" "lib")
-        else()
-            option(Boost_USE_DEBUG_RUNTIME "boost debug runtime" OFF)
         endif()
         #set(Boost_DEBUG ON)  #<---------- Real life saver
 
