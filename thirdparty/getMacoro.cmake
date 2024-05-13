@@ -1,6 +1,6 @@
 
 set(GIT_REPOSITORY      "https://github.com/ladnir/macoro.git")
-set(GIT_TAG             "cfd155c11bd52c000c0c1afd6f03ed247c49610e" )
+set(GIT_TAG             "3a27c54637bf66915d4ce5aac00a9212710e24df" )
 
 set(CLONE_DIR "${COPROTO_THIRDPARTY_CLONE_DIR}/macoro")
 set(BUILD_DIR "${CLONE_DIR}/out/build/${COPROTO_CONFIG}")
@@ -22,9 +22,7 @@ if (NOT macoro_FOUND
                        "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH_STR}"
                        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE} 
                        -DMACORO_NO_SYSTEM_PATH=${COPROTO_NO_SYSTEM_PATH}
-                       -DMACORO_FETCH_OPTIONAL=ON
-                       -DMACORO_FETCH_VARIANT=ON
-                       -DVERBOSE_FETCH=true
+                       -DMACORO_FETCH_AUTO=true
                        -DMACORO_CPP_VER=${COPROTO_CPP_VER}
                        -DMACORO_PIC=${COPROTO_PIC}
                        -DMACORO_ASAN=${COPROTO_ASAN}
@@ -39,7 +37,7 @@ if (NOT macoro_FOUND
         run(NAME "Cloning ${GIT_REPOSITORY}" CMD ${DOWNLOAD_CMD} WD ${COPROTO_THIRDPARTY_CLONE_DIR})
     endif()
 
-    #run(NAME "Checkout ${GIT_TAG} " CMD ${CHECKOUT_CMD}  WD ${CLONE_DIR})
+    run(NAME "Checkout ${GIT_TAG} " CMD ${CHECKOUT_CMD}  WD ${CLONE_DIR})
     run(NAME "Configure"       CMD ${CONFIGURE_CMD} WD ${CLONE_DIR})
     run(NAME "Build"           CMD ${BUILD_CMD}     WD ${CLONE_DIR})
     run(NAME "Install"         CMD ${INSTALL_CMD}   WD ${CLONE_DIR})
