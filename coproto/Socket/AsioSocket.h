@@ -21,10 +21,10 @@
 #include <string>
 #include <vector>
 
-#define COPROTO_ASIO_LOG
 #ifndef NDEBUG
-	#define COPROTO_ASIO_DEBUG
 #endif
+	#define COPROTO_ASIO_LOG
+	#define COPROTO_ASIO_DEBUG
 
 namespace coproto
 {
@@ -227,30 +227,6 @@ namespace coproto
 					}
 				}
 
-				Awaiter(Awaiter&& a)
-					: mSock(a.mSock)
-					, mData(a.mData)
-					, mBt(a.mBt)
-					, mType(a.mType)
-					, mEc(std::move(a.mEc))
-					, mHandle(a.mHandle)
-					, mCancellationRequested(a.mCancellationRequested.load())
-					, mSynchronousFlag(a.mSynchronousFlag.load())
-					, mToken(std::move(a.mToken))
-					, mReg(std::move(a.mReg))
-					, mActiveCount(std::move(a.mActiveCount))
-#ifdef COPROTO_ASIO_LOG
-					, mLogState(a.mLogState)
-					, mIdx(a.mIdx)
-#endif
-				{
-					if (mHandle)
-					{
-						std::cout << "awaiter can not move after being started" << std::endl;
-						std::terminate();
-					}
-				}
-
 				Sock* mSock;
 				span<u8> mData;
 				u64 mBt = 0;
@@ -353,7 +329,41 @@ namespace coproto
 				}
 #endif
 
-				void close();
+				MACORO_NODISCARD
+				auto close()
+				{
+					struct Awaiter
+					{
+						std::shared_ptr<State> mState;
+
+						bool await_ready() const noexcept { return false; }
+						void await_suspend(std::coroutine_handle<> h) noexcept
+						{
+
+							boost::asio::dispatch(mState->mSock_.get_executor(),
+								[s = mState,
+								lt = mState->mOpCount.lockPtr(),
+								h
+								]()mutable {
+
+#ifdef COPROTO_ASIO_LOG
+									s->log("close ");
+#endif
+
+									s->mSock_.lowest_layer().close();
+
+									lt.reset();
+									h.resume();
+
+								});
+						}
+						void await_resume() const noexcept {}
+					};
+
+					return Awaiter{ mState };
+
+				}
+
 
 				Awaiter send(span<u8> data, macoro::stop_token token = {}) { return Awaiter(this, data, true, std::move(token)); };
 				Awaiter recv(span<u8> data, macoro::stop_token token = {}) { return Awaiter(this, data, false, std::move(token)); };
@@ -376,27 +386,6 @@ namespace coproto
 		};
 
 
-
-		template<typename SocketType>
-		inline void AsioSocket<SocketType>::Sock::close()
-		{
-
-			
-			boost::asio::dispatch(mState->mSock_.get_executor(),
-				[s = mState,
-				lt = mState->mOpCount.lockPtr()
-				]()mutable{
-
-#ifdef COPROTO_ASIO_LOG
-				s->log("close ");
-#endif
-
-				s->mSock_.lowest_layer().close();
-
-				lt.reset();
-
-				});
-		}
 
 
 
@@ -670,8 +659,10 @@ namespace coproto
 
 			void log(std::string s)
 			{
+#ifdef COPROTO_ASIO_LOG
 				std::lock_guard<std::mutex> l(::coproto::ggMtx);
 				ggLog.push_back("accept::" + s);
+#endif
 			}
 
 			AsioAcceptor& mAcceptor;
@@ -844,8 +835,10 @@ namespace coproto
 
 		void log(std::string s)
 		{
+#ifdef COPROTO_ASIO_LOG
 			std::lock_guard<std::mutex> l(::coproto::ggMtx);
 			ggLog.push_back("connect::" + s);
+#endif
 		}
 
 		AsioConnect(

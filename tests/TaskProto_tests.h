@@ -31,10 +31,10 @@ namespace coproto
 		void task_nestedProtocol_ErrorCode_Test();
 		void task_asyncProtocol_Test();
 		void task_asyncProtocol_Throw_Test();
-		void task_endOfRound_Test();
 		void task_errorSocket_Test();
 		void task_cancel_send_test();
 		void task_cancel_recv_test();
+		void task_destroySelf_test();
 #else
 
 		inline void task_proto_test(){ throw UnitTestSkipped("CORPOTO_CPP20 not defined."); }
@@ -52,10 +52,10 @@ namespace coproto
 		inline void task_nestedProtocol_ErrorCode_Test(){ throw UnitTestSkipped("CORPOTO_CPP20 not defined."); }
 		inline void task_asyncProtocol_Test(){ throw UnitTestSkipped("CORPOTO_CPP20 not defined."); }
 		inline void task_asyncProtocol_Throw_Test(){ throw UnitTestSkipped("CORPOTO_CPP20 not defined."); }
-		inline void task_endOfRound_Test(){ throw UnitTestSkipped("CORPOTO_CPP20 not defined."); }
 		inline void task_errorSocket_Test(){ throw UnitTestSkipped("CORPOTO_CPP20 not defined."); }
 		inline void task_cancel_send_test(){ throw UnitTestSkipped("CORPOTO_CPP20 not defined."); }
 		inline void task_cancel_recv_test(){ throw UnitTestSkipped("CORPOTO_CPP20 not defined."); }
+		inline void task_destroySelf_test() { throw UnitTestSkipped("CORPOTO_CPP20 not defined."); }
 #endif
 	}
 

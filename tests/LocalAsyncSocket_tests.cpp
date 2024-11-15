@@ -5,9 +5,17 @@
 #include "macoro/macros.h"
 #include "macoro/thread_pool.h"
 
+
+void coproto::tests::LocalAsyncSocket_noop_test()
+{
+	auto s = LocalAsyncSocket::makePair();
+}
+
 void coproto::tests::LocalAsyncSocket_sendRecv_test()
 {
 	auto s = LocalAsyncSocket::makePair();
+	s[0].enableLogging();
+	s[1].enableLogging();
 
 	u64 count = 0;
 	auto task_ = [&]() -> task<void> {
@@ -18,13 +26,14 @@ void coproto::tests::LocalAsyncSocket_sendRecv_test()
 		std::cout << "failed " << COPROTO_LOCATION << std::endl;
 		std::terminate();
 		MC_END();
-	};
+		};
 
 	std::vector<u8> c(10);
 	auto a0 = s[0].mSock->send(c);
 	COPROTO_ASSERT(a0.await_ready() == false);
 	auto t0 = task_();
 	auto h0 = a0.await_suspend(t0.handle());
+	(void)h0;
 
 	COPROTO_ASSERT(h0 != t0.handle());
 	COPROTO_ASSERT(count == 0);
@@ -98,7 +107,7 @@ void coproto::tests::LocalAsyncSocket_parSendRecv_test()
 				MC_AWAIT(macoro::transfer_to(ex[idx]));
 			}
 			MC_END();
-		};
+			};
 
 		macoro::sync_wait(macoro::when_all_ready(f1(0), f1(1), f1(2), f1(3)));
 	}
@@ -123,7 +132,7 @@ void coproto::tests::LocalAsyncSocket_cancellation_test()
 	{
 		auto s = LocalAsyncSocket::makePair();
 
-		using Log = std::vector<std::pair<const char*, std::thread::id>>;
+		//using Log = std::vector<std::pair<const char*, std::thread::id>>;
 
 		std::vector<std::array<macoro::stop_source, 4>> srcs(numOps + 1);
 		std::vector< std::array<macoro::stop_token, 4>> tkns(numOps + 1);
@@ -226,7 +235,7 @@ void coproto::tests::LocalAsyncSocket_cancellation_test()
 
 			}
 			MC_END();
-		};
+			};
 		macoro::sync_wait(macoro::when_all_ready(f1(0), f1(1), f1(2), f1(3)));
 	}
 }
@@ -258,59 +267,64 @@ void coproto::tests::LocalAsyncSocket_close_test()
 			proms[2].get_future(),
 			proms[3].get_future()
 		};
-		using Log = std::vector<std::pair<const char*, std::thread::id>>;
+		//using Log = std::vector<std::pair<const char*, std::thread::id>>;
 
-		auto f1 = [&](u64 idx) {
-			MC_BEGIN(task<void>, &ex, idx, &proms, &fut, &s,tt,
-				v = u64{},
-				i = u64{},
-				buffer = span<u8>{},
-				r = std::pair<error_code, u64>{});
+		auto f1 = [&](u64 idx) -> task<> {
+			//MC_BEGIN(task<void>, &ex, idx, &proms, &fut, &s,tt,
+			auto v = u64{};
+			auto i = u64{};
+			auto buffer = span<u8>{};
+			auto r = std::pair<error_code, u64>{};
 
 			buffer = span<u8>((u8*)&v, sizeof(v));
 
-			MC_AWAIT(macoro::transfer_to(ex[idx]));
+			co_await(macoro::transfer_to(ex[idx]));
 			//MC_AWAIT(ex[0].post());
 			proms[idx].set_value();
 			fut.get();
 			{
 				if (tt % 4 == idx)
-					s[0].close();
+					co_await(s[0].close());
 
 				if (idx == 0) {
-					MC_AWAIT_SET(r, s[0].mSock->recv(buffer));
+					r = co_await s[0].mSock->recv(buffer);
 				}
 				if (idx == 1)
 				{
-					MC_AWAIT_SET(r, s[1].mSock->recv(buffer));
+					r = co_await s[1].mSock->recv(buffer);
 				}
 				if (idx == 2)
 				{
 					v = i;
-					MC_AWAIT_SET(r, s[0].mSock->send(buffer));
+					r = co_await s[0].mSock->send(buffer);
 				}
 				if (idx == 3)
 				{
 
 					v = -i;
-					MC_AWAIT_SET(r, s[1].mSock->send(buffer));
+					r = co_await s[1].mSock->send(buffer);
 				}
 
-				MC_AWAIT(macoro::transfer_to(ex[idx]));
+				co_await(macoro::transfer_to(ex[idx]));
 				//MC_AWAIT(ex[0].post());
 			}
 
-			MC_END();
-		};
+			//MC_END();
+			};
 
-		auto t0 = f1(0) | macoro::make_eager();
-		auto t1 = f1(1) | macoro::make_eager();
-		auto t2 = f1(2) | macoro::make_eager();
-		auto t3 = f1(3) | macoro::make_eager();
+		//auto t0 = f1(0) | macoro::make_eager();
+		//auto t1 = f1(1) | macoro::make_eager();
+		//auto t2 = f1(2) | macoro::make_eager();
+		//auto t3 = f1(3) | macoro::make_eager();
+		auto t = macoro::make_blocking(macoro::when_all_ready(
+			f1(0),
+			f1(1),
+			f1(2),
+			f1(3)
+		));
 
 		promise.set_value();
-		macoro::sync_wait(macoro::when_all_ready(std::move(t0), std::move(t1), std::move(t2), std::move(t3)));
-
+		t.get();
 	}
 
 }

@@ -13,12 +13,14 @@ namespace coproto
 		{
 			std::array<BufferingSocket, 2> s;
 
+			s[0].enableLogging();
+			s[1].enableLogging();
 
 			std::vector<u8> sb(10), rb(10);
 			sb[4] = 5;
 			auto a0 = s[0].mSock->send(sb);
 			auto a1 = s[1].mSock->recv(rb);
-
+			int done = 0;
 			auto task_ = [&](bool sender) -> task<void> {
 
 				MC_BEGIN(task<>, &, sender);
@@ -26,21 +28,24 @@ namespace coproto
 					MC_AWAIT(a0);
 				else
 					MC_AWAIT(a1);
-
+				++done;
 				MC_END();
 			};
 
-			auto t0 = macoro::make_eager(task_(0));
-			auto t1 = macoro::make_eager(task_(1));
+
+			auto t = macoro::make_blocking(macoro::when_all_ready(
+				task_(0),
+				task_(1)
+			));
 
 			BufferingSocket::exchangeMessages(s[0], s[1]);
 
-			auto r = macoro::sync_wait(macoro::when_all_ready(
-				std::move(t0), std::move(t1)
-			));
+			auto r = t.get();
 			std::get<0>(r).result();
 			std::get<1>(r).result();
 
+			if (done != 2)
+				throw COPROTO_RTE;
 			if (sb != rb)
 				throw MACORO_RTE_LOC;
 		}
@@ -48,11 +53,12 @@ namespace coproto
 
 		void BufferingSocket_asyncSend_test()
 		{
-
-
 			std::vector<u8> sb(10), rb(10);
-
 			std::array< BufferingSocket, 2> ss;
+
+			ss[0].enableLogging();
+			ss[1].enableLogging();
+
 			auto task_ = [&](bool sender) -> task<void> {
 
 				MC_BEGIN(task<>, &, sender);
@@ -68,16 +74,11 @@ namespace coproto
 				MC_END();
 			};
 
-			auto e0 = task_(0)
-				| macoro::make_eager();
-			auto e1 = task_(1)
-				| macoro::make_eager();
+			auto t = macoro::make_blocking(macoro::when_all_ready(task_(0), task_(1)));
 
 			BufferingSocket::exchangeMessages(ss[0], ss[1]);
 
-			auto r = macoro::sync_wait(macoro::when_all_ready(
-				std::move(e0), std::move(e1)
-			));
+			auto r = t.get();
 			std::get<0>(r).result();
 			std::get<1>(r).result();
 		}
@@ -86,7 +87,7 @@ namespace coproto
 		{
 
 			u64 trials = 100;
-			u64 numOps = 100;
+			i64 numOps = 100;
 
 			macoro::thread_pool ex[4];
 			auto work0 = ex[0].make_work();
@@ -158,13 +159,21 @@ namespace coproto
 					});
 
 
-				auto t0 = f1(0) | macoro::make_eager();
-				auto t1 = f1(1) | macoro::make_eager();
-				auto t2 = f1(2) | macoro::make_eager();
-				auto t3 = f1(3) | macoro::make_eager();
+				auto t = macoro::sync_wait(macoro::when_all_ready(
+					f1(0), f1(1), f1(2), f1(3)
+				));
 
-				macoro::sync_wait(macoro::when_all_ready(
-					std::move(t0), std::move(t1), std::move(t2), std::move(t3)));
+				//using Awaitable = decltype(macoro::when_all_ready(
+				//	f1(0), f1(1), f1(2), f1(3)
+				//));
+				//using R = decltype(macoro::make_blocking<Awaitable>(
+				//	std::forward<Awaitable>(std::declval<Awaitable>())).get());
+
+				std::get<0>(t).result();
+				std::get<1>(t).result();
+				std::get<2>(t).result();
+				std::get<3>(t).result();
+
 				done = true;
 				f.join();
 			}
@@ -236,7 +245,7 @@ namespace coproto
 				auto a0 = s[0].mSock->recv(sb, token);
 				std::pair<error_code, u64> res;
 				//auto a1 = s[1].mSock->recv(rb);
-				auto b = std::chrono::system_clock::now();
+				//auto b = std::chrono::system_clock::now();
 
 				auto task_ = [&](bool sender) -> task<void> {
 
@@ -263,18 +272,15 @@ namespace coproto
 					MC_END();
 				};
 
-				auto t1 = task_(1) | macoro::make_eager();
-				auto t0 = task_(0) | macoro::make_eager();
+				auto t = macoro::make_blocking(macoro::when_all_ready(task_(1), task_(0)));
 
 				BufferingSocket::exchangeMessages(s[0], s[1]);
 
-				auto r = macoro::sync_wait(macoro::when_all_ready(std::move(t1), std::move(t0)));
+				auto r = t.get();
 
 				std::get<0>(r).result();
 				std::get<1>(r).result();
 			}
-
-
 
 		}
 
@@ -298,7 +304,7 @@ namespace coproto
 			for (u64 tt = 0; tt < trials; ++tt)
 			{
 				std::array<BufferingSocket, 2> s;
-				using Log = std::vector<std::pair<const char*, std::thread::id>>;
+				//using Log = std::vector<std::pair<const char*, std::thread::id>>;
 
 				std::vector<std::array<macoro::stop_source, 4>> srcs(numOps + 1);
 				std::vector< std::array<macoro::stop_token, 4>> tkns(numOps + 1);
@@ -409,13 +415,10 @@ namespace coproto
 					});
 
 
-				auto t0 = f1(0) | macoro::make_eager();
-				auto t1 = f1(1) | macoro::make_eager();
-				auto t2 = f1(2) | macoro::make_eager();
-				auto t3 = f1(3) | macoro::make_eager();
+				//auto t0 = macoro::sync_wait();
 
 				auto r = macoro::sync_wait(macoro::when_all_ready(
-					std::move(t0), std::move(t1), std::move(t2), std::move(t3)));
+					f1(0), f1(1), f1(2), f1(3)));
 				done = true;
 				f.join();
 
@@ -448,7 +451,7 @@ namespace coproto
 		{
 
 			u64 trials = 100;
-			u64 numOps = 20;
+			//u64 numOps = 20;
 
 			macoro::thread_pool ex[4];
 			auto work0 = ex[0].make_work();
@@ -468,7 +471,7 @@ namespace coproto
 				auto promise = std::promise<void>{};
 				auto fut = promise.get_future().share();
 
-				using Log = std::vector<std::pair<const char*, std::thread::id>>;
+				//using Log = std::vector<std::pair<const char*, std::thread::id>>;
 
 				auto f1 = [&](u64 idx) {
 					MC_BEGIN(task<void>, idx, &fut, &s, tt, &ex,
@@ -484,7 +487,7 @@ namespace coproto
 					fut.get();
 					{
 						if (tt % 4 == idx)
-							s[0].close();
+							MC_AWAIT(s[0].close());
 
 						if (idx == 0) {
 							MC_AWAIT_SET(r, s[0].mSock->recv(buffer));
@@ -517,14 +520,10 @@ namespace coproto
 						BufferingSocket::exchangeMessages(s[0], s[1]);
 					});
 
-				auto t0 = f1(0) | macoro::make_eager();
-				auto t1 = f1(1) | macoro::make_eager();
-				auto t2 = f1(2) | macoro::make_eager();
-				auto t3 = f1(3) | macoro::make_eager();
-
+				
 				promise.set_value();
 				macoro::sync_wait(macoro::when_all_ready(
-					std::move(t0), std::move(t1), std::move(t2), std::move(t3)));
+					f1(0), f1(1), f1(2), f1(3)));
 				done = true;
 				f.join();
 			}

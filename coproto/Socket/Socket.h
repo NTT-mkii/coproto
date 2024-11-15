@@ -66,11 +66,11 @@ namespace coproto
 	//       It is suggested that this always returns false. Return true if the operation 
 	//       has somehow already completed and await_suspend should not be called.
 	// 
-	//     * macoro::coroutine_handle<> SendAwaiter::await_suspend(macoro::coroutine_handle<> h) 
+	//     * std::coroutine_handle<> SendAwaiter::await_suspend(std::coroutine_handle<> h) 
 	//       
 	//       We suggest in this function you start the async send. If the send completes 
 	//       immediately/synchronously, then await_suspend should return h. Otherwise, await_suspend
-	//       should somehow store h and return macoro::noop_coroutine(). When the send
+	//       should somehow store h and return std::noop_coroutine(). When the send
 	//       completes asynchronously, call h.resume().
 	// 
 	//     * std::pair<error_code, u64> SendAwaiter::await_resume()
@@ -140,7 +140,7 @@ namespace coproto
 		template<typename Container>
 		auto send(Container& t, macoro::stop_token token = {})
 		{
-			return internal::RefSendProto<Container>(mImpl.get(), mId, t, std::move(token));
+			return internal::RefSendAwaiter<Container>(mImpl.get(), mId, t, std::move(token));
 		}
 
 		// Send the Container `t`. A stop_token can be provided to request that the send be 
@@ -152,7 +152,7 @@ namespace coproto
 		template<typename Container>
 		auto send(Container&& t, macoro::stop_token token = {})
 		{
-			return internal::MoveSendProto<Container>(mImpl.get(), mId, std::forward<Container>(t), std::move(token));
+			return internal::MoveSendAwaiter<Container>(mImpl.get(), mId, std::forward<Container>(t), std::move(token));
 		}
 
 		// Receive the next message into the container `r` with a timeout `to`. After the timeout 
@@ -168,7 +168,7 @@ namespace coproto
 		template<typename Container>
 		auto recv(Container& t, macoro::stop_token token = {})
 		{
-			return internal::RefRecvProto<Container, false>(mImpl.get(), mId, t, std::move(token));
+			return internal::RefRecvAwaiter<Container, false>(mImpl.get(), mId, t, std::move(token));
 		}
 
 		// Receive the next message into the container `r`. An optional stop_token can be provided
@@ -176,7 +176,7 @@ namespace coproto
 		template<typename Container>
 		auto recv(Container&& t, macoro::stop_token token = {})
 		{
-			return internal::MoveRecvProto<Container, false>(mImpl.get(), mId, std::forward<Container>(t), std::move(token));
+			return internal::MoveRecvAwaiter<Container, false>(mImpl.get(), mId, std::forward<Container>(t), std::move(token));
 		}
 
 		// Receive the next message and store the message in a class of type Container. An optional 
@@ -185,7 +185,7 @@ namespace coproto
 		template<typename Container>
 		auto recv(macoro::stop_token token = {})
 		{
-			return internal::MoveRecvProto<Container, true>(mImpl.get(), mId, std::move(token));
+			return internal::MoveRecvAwaiter<Container, true>(mImpl.get(), mId, std::move(token));
 		}
 
 		// Receive the next message into the container `r` with a timeout `to`. After the timeout 
@@ -203,7 +203,7 @@ namespace coproto
 		template<typename Container>
 		auto recvResize(Container& t, macoro::stop_token token = {})
 		{
-			return internal::RefRecvProto<Container, true>(mImpl.get(), mId, t, std::move(token));
+			return internal::RefRecvAwaiter<Container, true>(mImpl.get(), mId, t, std::move(token));
 		}
 
 		// returns the number of bytes sent.
@@ -216,11 +216,18 @@ namespace coproto
 			return mImpl->mBytesReceived;
 		}
 
-		// Cancel all operations that are currently being performed.
-		// Future operations will complete an error.
-		void close()
+		// returns true if close() has been called.
+		bool closed()
 		{
-			mImpl->close();
+			return mImpl->mClosed;
+		}
+
+		// Cancel all operations that are currently being performed.
+		// Future operations will complete an error. The result must be awaited.
+		[[nodiscard]]
+		internal::CloseAwaiter close()
+		{
+			return { mImpl->mCloseSock.get()};
 		}
 
 

@@ -15,6 +15,7 @@
 #include "eval.h"
 #include "TaskProto14_tests.h"
 
+#define TEST(X) if(!(X)) throw COPROTO_RTE
 
 namespace coproto
 {
@@ -35,27 +36,27 @@ namespace coproto
 			for (auto type : types)//{EvalTypes::blocking})
 			{
 
-				int recv = 0;
-				std::array<bool, 2> started = { false,false };
+				//int recv = 0;
+				//std::array<bool, 2> started = { false,false };
 
 				auto task_proto = [&](Socket ss, bool send)->task<void>
-				{
-					MC_BEGIN(task<void>, ss, send, cc = int{}, &started, &recv);
-					if (send)
 					{
-						started[0] = true;
-						cc = 42;
-						MC_AWAIT(ss.send(cc));
-					}
-					else
-					{
-						started[1] = true;
-						MC_AWAIT(ss.recv(cc));
-						recv = cc;
-					}
+						MC_BEGIN(task<void>, ss, send, cc = int{}/*, &started, &recv*/);
+						if (send)
+						{
+							//started[0] = true;
+							cc = 42;
+							MC_AWAIT(ss.send(cc));
+						}
+						else
+						{
+							//started[1] = true;
+							MC_AWAIT(ss.recv(cc));
+							//recv = cc;
+						}
 
-					MC_END();
-				};
+						MC_END();
+					};
 
 				auto r = eval(task_proto, type);
 				std::get<0>(r).result();
@@ -67,7 +68,7 @@ namespace coproto
 		void task14_strSendRecv_Test()
 		{
 			bool verbose = false;
-			int sDone = 0, rDone = 0;
+			//int sDone = 0, rDone = 0;
 			auto proto = [&](Socket& s, bool party) -> task<void> {
 
 				MC_BEGIN(task<>, &, party
@@ -119,18 +120,18 @@ namespace coproto
 				{
 					if (verbose)
 						std::cout << "s done " << std::endl;
-					++sDone;
+					//++sDone;
 				}
 				else
 				{
 					if (verbose)
 						std::cout << "r done " << std::endl;
-					++rDone;
+					//++rDone;
 				}
 
 				MC_END();
 
-			};
+				};
 
 
 
@@ -195,7 +196,7 @@ namespace coproto
 				}
 
 				MC_END();
-			};
+				};
 
 
 			for (auto t : types)
@@ -257,7 +258,7 @@ namespace coproto
 				}
 
 				MC_END();
-			};
+				};
 
 
 			for (auto t : types)
@@ -277,7 +278,7 @@ namespace coproto
 				);
 				MC_AWAIT(s.send(buff));
 				MC_END();
-			};
+				};
 
 
 			for (auto t : types)
@@ -320,7 +321,7 @@ namespace coproto
 					throw std::runtime_error("");
 
 				MC_END();
-			};
+				};
 			for (auto t : types)
 			{
 				auto r = eval(proto, t);
@@ -346,7 +347,7 @@ namespace coproto
 					MC_AWAIT(s.recv(buff));
 				}
 				MC_END();
-			};
+				};
 
 			for (auto t : types)
 			{
@@ -388,12 +389,12 @@ namespace coproto
 
 						if (t != EvalTypes::Buffering &&
 							as_error_code(r.error()) != code::remoteClosed)
-							throw std::runtime_error("");
+							throw std::runtime_error(COPROTO_LOCATION);
 
 						MC_AWAIT_SET(r, s.send(buff) | macoro::wrap());
-						if (t != EvalTypes::Buffering && 
-							as_error_code(r.error()) != code::remoteClosed)
-							throw std::runtime_error("");
+						if (t != EvalTypes::Buffering &&
+							as_error_code(r.error()) != code::cancel)
+							throw std::runtime_error(COPROTO_LOCATION);
 
 					}
 					else
@@ -402,20 +403,20 @@ namespace coproto
 						MC_AWAIT_SET(r, s.recv(buff) | macoro::wrap());
 
 						if (as_error_code(r.error()) != code::badBufferSize)
-							throw std::runtime_error("");
+							throw std::runtime_error(COPROTO_LOCATION);
 
 
 						MC_AWAIT_SET(r, macoro::wrap(s.recv(buff)));
 						if (as_error_code(r.error()) != code::cancel)
-							throw std::runtime_error("");
+							throw std::runtime_error(COPROTO_LOCATION);
 
 						MC_AWAIT_SET(r, macoro::wrap(s.send(buff)));
 						if (as_error_code(r.error()) != code::cancel)
-							throw std::runtime_error("");
+							throw std::runtime_error(COPROTO_LOCATION);
 					}
 
 					MC_END();
-				};
+					};
 
 
 				auto r = eval(proto, t);
@@ -429,34 +430,34 @@ namespace coproto
 			for (auto t : types)
 			{
 				auto proto = [t](Socket& s, bool party) -> task<void>
-				{
-					MC_BEGIN(task<>, =
-						, i = int{ 0 }
-						, v = std::vector<int>(10)
-						, t0 = macoro::eager_task<void>{}
-						, t1 = macoro::eager_task<void>{}
-					);
-
-					//if (t == EvalTypes::Buffering)
-					//{
-					//	t0 = (s.send(std::move(i)) | macoro::start_on(ex));
-					//	MC_AWAIT(s.recv(i));
-					//	macoro::sync_wait(t0);
-
-					//	t1 = (s.send(std::move(v)) | macoro::start_on(ex));
-					//	MC_AWAIT(s.recvResize(v));
-					//	macoro::sync_wait(t1);
-					//}
-					//else
 					{
-						MC_AWAIT(s.send(std::move(i)));
-						MC_AWAIT(s.recv(i));
-						MC_AWAIT(s.send(std::move(v)));
-						MC_AWAIT(s.recvResize(v));
-					}
+						MC_BEGIN(task<>, =
+							, i = int{ 0 }
+							, v = std::vector<int>(10)
+							, t0 = macoro::eager_task<void>{}
+							, t1 = macoro::eager_task<void>{}
+						);
 
-					MC_END();
-				};
+						//if (t == EvalTypes::Buffering)
+						//{
+						//	t0 = (s.send(std::move(i)) | macoro::start_on(ex));
+						//	MC_AWAIT(s.recv(i));
+						//	macoro::sync_wait(t0);
+
+						//	t1 = (s.send(std::move(v)) | macoro::start_on(ex));
+						//	MC_AWAIT(s.recvResize(v));
+						//	macoro::sync_wait(t1);
+						//}
+						//else
+						{
+							MC_AWAIT(s.send(std::move(i)));
+							MC_AWAIT(s.recv(i));
+							MC_AWAIT(s.send(std::move(v)));
+							MC_AWAIT(s.recvResize(v));
+						}
+
+						MC_END();
+					};
 
 				//auto work = ex.make_work();
 				//if (t == EvalTypes::Buffering)
@@ -473,26 +474,26 @@ namespace coproto
 		{
 
 			auto proto = [](Socket& s, bool party) -> task<void>
-			{
-				MC_BEGIN(task<>, =
-					, c = macoro::result<char>{}
-				);
-
-				if (party)
 				{
-					s.close();
-				}
-				else
-				{
-					//throw std::runtime_error("");
-					MC_AWAIT_SET(c, s.recv<char>() | macoro::wrap());
+					MC_BEGIN(task<>, =
+						, c = macoro::result<char>{}
+					);
 
-					if (c.has_error())
-						s.close();
-				}
+					if (party)
+					{
+						MC_AWAIT(s.close());
+					}
+					else
+					{
+						//throw std::runtime_error("");
+						MC_AWAIT_SET(c, s.recv<char>() | macoro::wrap());
 
-				MC_END();
-			};
+						if (c.has_error())
+							MC_AWAIT(s.close());
+					}
+
+					MC_END();
+				};
 
 
 			for (auto t : types)
@@ -655,12 +656,12 @@ namespace coproto
 
 		void task14_nestedProtocol_Test()
 		{
-			bool verbose = false;
-			auto proto = [verbose](Socket& s, bool party) -> task<void> {
+			auto proto = [](Socket& s, bool party) -> task<void> {
 				MC_BEGIN(task<>, =
 					, str = std::string("hello from 0")
 					, n = u64(5)
 					, r = macoro::result<void>{}
+					, verbose = false
 				);
 				if (party)
 				{
@@ -686,7 +687,7 @@ namespace coproto
 				}
 
 				MC_END();
-			};
+				};
 
 			for (auto t : types)
 			{
@@ -759,7 +760,7 @@ namespace coproto
 				}
 
 				MC_END();
-			};
+				};
 
 			for (auto t : types)
 			{
@@ -805,11 +806,11 @@ namespace coproto
 				else
 				{
 					MC_AWAIT(s.recv(buff));
-					MC_AWAIT(task14_throwClient(s, n));
+					MC_AWAIT(task14_throwClient(s, n) | macoro::wrap());
 				}
 
 				MC_END();
-			};
+				};
 
 
 			for (auto t : types)
@@ -894,7 +895,7 @@ namespace coproto
 				}
 
 				MC_END();
-			};
+				};
 			//#ifdef MULTI 
 			//#undef MULTI
 			//#endif
@@ -928,10 +929,10 @@ namespace coproto
 					MC_AWAIT(task14_throwClient(s, n) | macoro::start_on(ex));
 				}
 				MC_END();
-			};
+				};
 
 
-			for (auto t : {EvalTypes::async})
+			for (auto t : { EvalTypes::async })
 			{
 				auto r = evalEx(proto, t);
 				std::get<0>(r).result();
@@ -941,70 +942,8 @@ namespace coproto
 			}
 		}
 
-		void task14_endOfRound_Test()
-		{
-			return;
-			u64 done = 0;
-
-			auto proto = [&done](Socket& s, bool party, macoro::thread_pool& sched) -> task<void> {
-
-				MC_BEGIN(task<>, =, &done, &sched
-					, i = int{}
-					, j = u64{}
-				);
-				if (party)
-				{
-					MC_AWAIT(s.send(42));
-					MC_AWAIT(sched.post());
-					for (j = 0; j < 10; ++j)
-					{
-						MC_AWAIT(s.recv(i));
-						MC_AWAIT(s.send(42));
-						MC_AWAIT(sched.post());
-					}
-				}
-				else
-				{
-					for (j = 0; j < 10; ++j)
-					{
-						MC_AWAIT(s.recv(i));
-						MC_AWAIT(s.send(42));
-						MC_AWAIT(sched.post());
-					}
-
-					MC_AWAIT(s.recv(i));
-				}
-				++done;
-
-				MC_END();
-			};
-
-
-			{
-				//STExecutor ex;
-				//auto s = RoundFunctionSock::makePair();
-				//auto t0 = proto(s[0], 0, ex) | macoro::start_on(ex);
-				//auto t1 = proto(s[1], 1, ex) | macoro::start_on(ex);
-
-				//while (ex.mQueue_.size() ||
-				//	s[0].mImpl->mInbound.size() ||
-				//	s[1].mImpl->mInbound.size())
-				//{
-				//	ex.run();
-				//	s[1].setInbound(s[0].getOutbound());
-				//	s[0].setInbound(s[1].getOutbound());
-				//}
-
-				//auto breakFn = [&]() { return ex.mQueue_.size() == 0; };
-
-				//if (done != 2)
-				//	throw COPROTO_RTE;
-			}
-		}
-
 		void task14_errorSocket_Test()
 		{
-
 			//#define MULTI
 			bool print = false;
 			u64 n = 1;
@@ -1015,6 +954,7 @@ namespace coproto
 					, buff = std::vector<u64>(10)
 					, fus = std::vector<macoro::eager_task<macoro::result<int>>>{}
 					, rs = std::vector<macoro::result<int>>{}
+					, r = macoro::result<void>{}
 					, tt = task<macoro::result<int>>{}
 					, i = u64{}
 				);
@@ -1025,44 +965,62 @@ namespace coproto
 				{
 					name = std::string("p1");
 					//co_await Name(name);
-					MC_AWAIT(s.recv(buff));
-					//co_await EndOfRound();
+
+					MC_AWAIT_SET(r, s.recv(buff) | macoro::wrap());
+					if (r.has_error())
+						MC_AWAIT(s.close());
+					r.value();
+
 
 					fus.emplace_back(
-						task14_echoServer(s.fork(), n, 5, rep, name, print)
+					task14_echoServer(s.fork(), n, 5, rep, name+".0", print)
 						| macoro::wrap()
 						| macoro::start_on(ex));
 
-					fus.emplace_back(task14_echoServer(s.fork(), n + 2, 6, rep, name, print) | macoro::wrap() | macoro::start_on(ex));
-					fus.emplace_back(task14_echoServer(s.fork(), n, 7, rep, name, print) | macoro::wrap() | macoro::start_on(ex));
 
-					MC_AWAIT_FN(rs.emplace_back, task14_echoClient(s, n, 10, rep, name, print) | macoro::wrap());
+					fus.emplace_back(task14_echoServer(s.fork(), n + 2, 6, rep, name + ".1", print) | macoro::wrap() | macoro::start_on(ex));
+					fus.emplace_back(task14_echoServer(s.fork(), n, 7, rep, name + ".2", print) | macoro::wrap() | macoro::start_on(ex));
+
+					//MC_AWAIT_FN(rs.emplace_back, task14_echoClient(s, n, 10, rep, name + ".3", print) | macoro::wrap());
 
 					for (i = 0; i < fus.size(); ++i)
 						MC_AWAIT_FN(rs.emplace_back, fus[i]);
 
 					for (i = 0; i < rs.size(); ++i)
+					{
+						if (rs[i].has_error() && !s.closed()) 
+							MC_AWAIT(s.close());
+
 						rs[i].value();
+					}
 				}
 				else
 				{
 					name = std::string("p0");
-					MC_AWAIT(s.send(buff));
+					MC_AWAIT_SET(r, s.send(buff) | macoro::wrap());
+					if (r.has_error())
+						MC_AWAIT(s.close());
+					r.value();
 
 					fus.emplace_back(
-						task14_echoClient(s.fork(), n, 5, rep, name, print)
+						task14_echoClient(s.fork(), n, 5, rep, name + ".0", print)
 						| macoro::wrap()
 						| macoro::start_on(ex));
-					fus.emplace_back(task14_echoClient(s.fork(), n + 2, 6, rep, name, print) | macoro::wrap() | macoro::start_on(ex));
-					fus.emplace_back(task14_echoClient(s.fork(), n, 7, rep, name, print) | macoro::wrap() | macoro::start_on(ex));
+					fus.emplace_back(task14_echoClient(s.fork(), n + 2, 6, rep, name + ".1", print) | macoro::wrap() | macoro::start_on(ex));
+					fus.emplace_back(task14_echoClient(s.fork(), n, 7, rep, name + ".2", print) | macoro::wrap() | macoro::start_on(ex));
 
-					MC_AWAIT_FN(rs.emplace_back, task14_echoServer(s, n, 10, rep, name, print) | macoro::wrap());
+					//MC_AWAIT_FN(rs.emplace_back, task14_echoServer(s, n, 10, rep, name + ".3", print) | macoro::wrap());
 
 					for (i = 0; i < fus.size(); ++i)
 						MC_AWAIT_FN(rs.emplace_back, fus[i]);
 
 					for (i = 0; i < rs.size(); ++i)
+					{
+						if (rs[i].has_error() && !s.closed())
+							MC_AWAIT(s.close());
+
 						rs[i].value();
+					}
 				}
 
 				MC_END();
@@ -1092,6 +1050,8 @@ namespace coproto
 						++numOps;
 						return code::success;
 					};
+					s[0].enableLogging();
+					s[1].enableLogging();
 					auto w = macoro::when_all_ready(proto(s[0], 0, stx0), proto(s[1], 1, stx0));
 					auto r = macoro::sync_wait(std::move(w));
 
@@ -1117,6 +1077,8 @@ namespace coproto
 							}
 							return code::success;
 						};
+
+						//std::cout << "-------"<<i<<"--------" << std::endl;
 						auto w = macoro::when_all_ready(proto(s[0], 0, stx0), proto(s[1], 1, stx0));
 						auto r = macoro::sync_wait(std::move(w));
 
@@ -1140,37 +1102,31 @@ namespace coproto
 				{
 				}
 			}
-			}
+		}
 
 		void task14_cancel_send_test()
 		{
 			macoro::stop_source src;
 			auto token = src.get_token();
 			auto proto = [&](Socket& s, bool party) -> task<void>
+				{
+					MC_BEGIN(task<>, &s, &token, i = int{});
+
+					MC_AWAIT(s.send(i, token));
+
+					MC_END();
+				};
+
 			{
-				MC_BEGIN(task<>, &s, &token, i = int{});
 
-				MC_AWAIT(s.send(i, token));
-
-				MC_END();
-			};
-
-			for (auto t : types)
-			{
-				std::thread thrd = std::thread([&] {
-					std::this_thread::sleep_for(std::chrono::milliseconds(5));
-					src.request_stop();
-					});
-
-				auto r = eval(proto, t);
-
-				thrd.join();
-				try { std::get<0>(r).result(); }
-				catch (std::system_error& e) { COPROTO_ASSERT(e.code() == code::operation_aborted); }
-				try { std::get<1>(r).result(); }
-				catch (std::system_error& e) { COPROTO_ASSERT(e.code() == code::operation_aborted); }
-
-
+				auto s = LocalAsyncSocket::makePair();
+				auto b = macoro::make_blocking(proto(s[0], 0));
+				src.request_stop();
+				try { b.get(); }
+				catch (std::system_error& e) {
+					auto ec = e.code();
+					TEST(ec == code::operation_aborted);
+				}
 			}
 		}
 
@@ -1181,27 +1137,18 @@ namespace coproto
 			auto token = src.get_token();
 
 			auto proto = [&](Socket& s, bool party) -> task<void>
+				{
+					MC_BEGIN(task<>, =, i = int{});
+					MC_AWAIT(s.recv(i, token));
+					MC_END();
+				};
+
 			{
-				MC_BEGIN(task<>, =, i = int{});
-				MC_AWAIT(s.recv(i, token));
-				MC_END();
-			};
-
-			for (auto t : types)
-			{
-				std::thread thrd = std::thread([&] {
-					std::this_thread::sleep_for(std::chrono::milliseconds(5));
-					src.request_stop();
-					});
-
-				auto r = eval(proto, t);
-
-				thrd.join();
-				try { std::get<0>(r).result(); }
-				catch (std::system_error& e) { COPROTO_ASSERT(e.code() == code::operation_aborted); }
-				try { std::get<1>(r).result(); }
-				catch (std::system_error& e) { COPROTO_ASSERT(e.code() == code::operation_aborted); }
-
+				auto s = LocalAsyncSocket::makePair();
+				auto b = macoro::make_blocking(proto(s[0], 0));
+				src.request_stop();
+				try { b.get(); }
+				catch (std::system_error& e) { TEST(e.code() == code::operation_aborted); }
 
 			}
 		}
@@ -1211,20 +1158,20 @@ namespace coproto
 			auto maxLag = 20;
 			macoro::stop_source src;
 			auto token = src.get_token();
-			macoro::thread_pool ios;
+			static macoro::thread_pool ios;
 			auto w = ios.make_work();
 			ios.create_thread();
-			std::chrono::time_point<std::chrono::steady_clock> start, end;
-			auto proto = [&](Socket& s, bool party) -> task<void>
-			{
-				MC_BEGIN(task<>, &s, &ios, &start, &end, i = int{});
+			static std::chrono::time_point<std::chrono::steady_clock> start, end;
+			auto proto = [](Socket& s, bool party) -> task<void>
+				{
+					MC_BEGIN(task<>, s, i = int{});
 
-				start = std::chrono::steady_clock::now();
-				MC_AWAIT(s.send(i, macoro::timeout(ios, std::chrono::milliseconds(15))));
-				end = std::chrono::steady_clock::now();
+					start = std::chrono::steady_clock::now();
+					MC_AWAIT(s.recv(i, macoro::timeout(ios, std::chrono::milliseconds(15))));
+					end = std::chrono::steady_clock::now();
 
-				MC_END();
-			};
+					MC_END();
+				};
 
 			for (auto t : types)
 			{
@@ -1237,7 +1184,10 @@ namespace coproto
 				if (dur > 15 + maxLag)
 					throw MACORO_RTE_LOC;
 
-				try { std::get<0>(r).result(); }
+				try {
+					std::get<0>(r).result(); 
+					throw MACORO_RTE_LOC;
+				}
 				catch (std::system_error& e) {
 
 					if (e.code() != code::operation_aborted)
@@ -1247,10 +1197,22 @@ namespace coproto
 						throw;
 					}
 				}
-				try { std::get<1>(r).result(); }
+				try { 
+					std::get<1>(r).result(); 
+					throw MACORO_RTE_LOC;
+				}
 				catch (std::system_error& e) {
-					if (e.code() != code::operation_aborted)
-						throw;
+					auto ec = e.code();
+					if (t == EvalTypes::async)
+					{
+						if (ec != code::remoteClosed)
+							throw;
+					}
+					else
+					{
+						if (ec != code::operation_aborted)
+							throw;
+					}
 				}
 			}
 
@@ -1258,6 +1220,6 @@ namespace coproto
 			ios.join();
 		}
 
-		}
-
 	}
+
+}

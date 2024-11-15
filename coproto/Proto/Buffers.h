@@ -17,198 +17,261 @@
 
 
 #include "coproto/Socket/SocketScheduler.h"
+#include <source_location>
+#include "macoro/trace.h"
 
 namespace coproto
 {
+	//struct SockScheduler;
 
 
-	struct BadReceiveBufferSize : public std::system_error
+
+	inline void addTraceRethrow(std::exception_ptr ptr, std::vector<std::source_location>& stack)
 	{
-		u64 mBufferSize, mReceivedSize;
+		auto stackString = [&]() ->std::string 
+		{
+			try {
+				std::stringstream ss;
+				ss << "\n";
+				for (auto i = 0ull; i < stack.size(); ++i)
+				{
+					ss << i << " " << stack[i].file_name() << ":" << stack[i].line() << "\n";
+				}
+				return ss.str();
+			}
+			catch (...)
+			{
+			}
+			return "";
+		};
 
-		BadReceiveBufferSize(u64 bufferSize, u64 receivedSize)
-			: std::system_error(code::badBufferSize,
-				std::string(
-					"\nlocal buffer size:   " + std::to_string(bufferSize) +
-					" bytes\ntransmitted size: " + std::to_string(receivedSize) +
-					" bytes\n"
-				))
-			, mBufferSize(bufferSize)
-			, mReceivedSize(receivedSize)
-		{}
-	};
+		try {
+			std::rethrow_exception(ptr);
+		}
+		catch (BadReceiveBufferSize& e)
+		{
+			throw BadReceiveBufferSize(e.mBufferSize, e.mReceivedSize, stackString());
+		}
+		catch (std::system_error& e)
+		{
+			throw std::system_error(e.code(), stackString());
+		}
+		catch (std::exception& e)
+		{
+			throw std::runtime_error(e.what() + stackString());
+		}
+		catch (...)
+		{
+			throw std::runtime_error("unknown exception" + stackString());
+		}
+	}
 
 	namespace internal
 	{
 
 
-		template<typename Container>
-		struct MvSendBuffer : public SendOp
-		{
-			Container mCont;
-
-			MvSendBuffer(Container&& c)
-				:mCont(std::forward<Container>(c))
-			{
-			}
-
-			span<u8> asSpan() override
-			{
-				return ::coproto::internal::asSpan(mCont);
-			}
-
-			void setError(std::exception_ptr e) override
-			{
-			}
-
-		};
-
-
-
-		struct SendProtoBase 
+		// an CRTP awaiter used for send operations.
+		// when awaited socketSched.send(...) is called.
+		// getBuffer() must be implemented 
+		// by SendAwaiter.
+		template<typename SendAwaiter>
+		struct SendAwaiterBase : macoro::basic_traceable
 		{
 			SockScheduler* mSock = nullptr;
 			SessionID mId;
-			std::exception_ptr mExPtr;
 			macoro::stop_token mToken;
-
-			SendProtoBase(SockScheduler* s, SessionID sid, macoro::stop_token&& token)
-				:mSock(s)
-				,mId(sid)
-				,mToken(std::move(token))
+			std::exception_ptr mExPtr;
+			SendAwaiterBase(SockScheduler* s, SessionID sid, macoro::stop_token&& token)
+				: mSock(s)
+				, mId(sid)
+				, mToken(std::move(token))
 			{}
-			virtual SendBuffer getBuffer() = 0;
+
+			SendAwaiterBase(SendAwaiterBase&& other)
+				: mSock(other.mSock)
+				, mId(other.mId)
+				, mToken(std::move(other.mToken))
+			{
+				assert(!other.mExPtr);
+			}
+
+			auto& self() { return *(SendAwaiter*)this; }
 
 			bool await_ready() {
 				return false;
 			}
 
 #ifdef COPROTO_CPP20
-
-			std::coroutine_handle<> await_suspend(std::coroutine_handle<> h);
+			template<typename promise>
+			std::coroutine_handle<> await_suspend(std::coroutine_handle<promise> h, std::source_location loc = std::source_location::current())
+			{
+				set_parent(macoro::detail::get_traceable(h), loc);
+				return mSock->send(mId, self().getBuffer(), coroutine_handle<>(h), std::move(mToken)).std_cast();
+			}
 #endif
-			coroutine_handle<> await_suspend(coroutine_handle<> h);
+			template<typename promise>
+			coroutine_handle<> await_suspend(coroutine_handle<promise> h, std::source_location loc = std::source_location::current())
+			{
+				set_parent(macoro::detail::get_traceable(h), loc);
+				return mSock->send(mId, self().getBuffer(), h, std::move(mToken));
+			}
+
+			void await_resume()
+			{
+				if (mExPtr)
+				{
+					std::vector<std::source_location> stack;
+					this->get_call_stack(stack);
+					addTraceRethrow(mExPtr, stack);
+				}
+			}
 
 		};
 
-		class RecvProtoBase :  public RecvBuffer
+
+
+		// an CRTP awaiter used for recv operations.
+		// when awaited socketSched.recv(...) is called.
+		// await_resume() and getBuffer() must be implemented 
+		// by RecvAwaiter.
+		template<typename RecvAwaiter>
+		class RecvAwaiterBase : public macoro::basic_traceable
 		{
 		public:
 			SockScheduler* mSock = nullptr;
 			SessionID mId;
 			macoro::stop_token mToken;
+			std::exception_ptr mExPtr;
 
-			RecvProtoBase(SockScheduler* s, SessionID sid, macoro::stop_token&& token)
+			RecvAwaiterBase(SockScheduler* s, SessionID sid, macoro::stop_token&& token)
 				: mSock(s)
 				, mId(sid)
 				, mToken(std::move(token))
 			{}
 
-			RecvBuffer* getBuffer() {
-				return this;
+			RecvAwaiterBase(RecvAwaiterBase&& other)
+				: mSock(other.mSock)
+				, mId(other.mId)
+				, mToken(std::move(other.mToken))
+			{
+				assert(!other.mExPtr);
 			}
+
+			auto& self() { return *(RecvAwaiter*)this; }
 
 			bool await_ready() { return false; }
-#ifdef COPROTO_CPP20
-			std::coroutine_handle<> await_suspend(std::coroutine_handle<> h);
-#endif
-			coroutine_handle<> await_suspend(coroutine_handle<> h);
 
+#ifdef COPROTO_CPP20
+			template<typename promise>
+			std::coroutine_handle<> await_suspend(
+				std::coroutine_handle<promise> h,
+				std::source_location loc = std::source_location::current())
+			{
+				set_parent(macoro::detail::get_traceable(h), loc);
+
+				return mSock->recv(mId, self().getBuffer(), coroutine_handle<>(h), std::move(mToken)).std_cast();
+			}
+#endif
+			template<typename promise>
+			inline coroutine_handle<> await_suspend(
+				coroutine_handle<promise> h, 
+				std::source_location loc = std::source_location::current())
+			{
+				set_parent(macoro::detail::get_traceable(h), loc);
+				return mSock->recv(mId, self().getBuffer(), h, std::move(mToken));
+			}
+
+			void await_resume()
+			{
+				if (mExPtr)
+				{
+					std::vector<std::source_location> stack;
+					this->get_call_stack(stack);
+					addTraceRethrow(mExPtr, stack);
+				}
+			}
 		};
 
+		// this awaiter performs a receive operation.
+		// It is used when the thing being received into is an rvalue.
+		// We will store the container locally in the awaiter.
 		template<typename Container, bool allowResize>
-		class MoveRecvProto : public RecvProtoBase
+		class MoveRecvAwaiter final : public RecvAwaiterBase<MoveRecvAwaiter<Container, allowResize>>
 		{
 		public:
+			using Base = RecvAwaiterBase<MoveRecvAwaiter<Container, allowResize>>;
 			Container mContainer;
+			RefRecvBuffer<Container, allowResize> mRef;
 
-			MoveRecvProto(SockScheduler* s, SessionID id, Container&& c, macoro::stop_token&& token)
-				: RecvProtoBase(s, id, std::move(token))
+			MoveRecvAwaiter(SockScheduler* s, SessionID id, Container&& c, macoro::stop_token&& token)
+				: Base(s, id, std::move(token))
 				, mContainer(std::forward<Container>(c))
+				, mRef(mContainer, &this->mExPtr)
 			{}
-			MoveRecvProto(SockScheduler* s, SessionID id, macoro::stop_token&& token)
-				: RecvProtoBase(s, id, std::move(token))
+			MoveRecvAwaiter(SockScheduler* s, SessionID id, macoro::stop_token&& token)
+				: Base(s, id, std::move(token))
+				, mContainer()
+				, mRef(mContainer, &this->mExPtr)
 			{}
-			MoveRecvProto() = default;
-			MoveRecvProto(MoveRecvProto&& m)
-				: RecvProtoBase(std::move((RecvProtoBase&)m))
-				, mContainer(std::move(m.mContainer))
-			{
-			}
-			MoveRecvProto(const MoveRecvProto&) = delete;
-			span<u8> asSpan(u64 size) override
-			{
+			//MoveRecvAwaiter() = default;
+			MoveRecvAwaiter(const MoveRecvAwaiter&) = delete;
+			//MoveRecvAwaiter(MoveRecvAwaiter&&) = delete;
 
-				auto buff = tryResize(size, mContainer, allowResize);
-				if (buff.size() != size)
-				{
-					mExPtr = std::make_exception_ptr(BadReceiveBufferSize(buff.size(), size));
-				}
-				return buff;
+			MoveRecvAwaiter(MoveRecvAwaiter&& m)
+				: Base(std::move((Base&)m))
+				, mContainer(std::move(m.mContainer))
+				, mRef(mContainer, &this->mExPtr)
+			{
 			}
+
+			RecvBuffer* getBuffer() { return &mRef; }
 
 			Container await_resume()
 			{
-				if (mExPtr)
-					std::rethrow_exception(mExPtr);
-
+				RecvAwaiterBase<MoveRecvAwaiter>::await_resume();
 				return std::move(mContainer);
 			}
 		};
 
 		template<typename Container, bool allowResize = true>
-		class RefRecvProto : public RecvProtoBase
+		class RefRecvAwaiter final : public RecvAwaiterBase<RefRecvAwaiter<Container, allowResize>>
 		{
 		public:
+			using Base = RecvAwaiterBase<RefRecvAwaiter<Container, allowResize>>;
 			Container& mContainer;
+			RefRecvBuffer<Container, allowResize> mRef;
 
-			RefRecvProto(SockScheduler* s,SessionID id, Container& t, macoro::stop_token&& token)
-				: RecvProtoBase(s, id, std::move(token))
+			RefRecvAwaiter(SockScheduler* s, SessionID id, Container& t, macoro::stop_token&& token)
+				: Base(s, id, std::move(token))
 				, mContainer(t)
+				, mRef(mContainer, &this->mExPtr)
 			{
 #ifdef COPROTO_LOGGING
 				setName("recv_" + std::to_string(gProtoIdx++));
 #endif
 			}
 
-			span<u8> asSpan(u64 size) override
-			{
 
-				auto buff = tryResize(size, mContainer, allowResize);
-				if (buff.size() != size)
-				{
-					mExPtr = std::make_exception_ptr(BadReceiveBufferSize(buff.size(), size));
-				}
-				return buff;
+			RefRecvAwaiter(RefRecvAwaiter&& m)
+				: Base(std::move((Base&)m))
+				, mContainer(m.mContainer)
+				, mRef(mContainer, &this->mExPtr)
+			{
 			}
 
-			void await_resume() 
-			{
-				
-				if (mExPtr)
-					std::rethrow_exception(mExPtr);
-			}
+			RecvBuffer* getBuffer() { return &mRef; }
 		};
 
 
 		template<typename Container>
-		class RefSendProto : public SendProtoBase, public SendOp
+		class RefSendAwaiter final : public SendAwaiterBase<RefSendAwaiter<Container>>
 		{
 		public:
+			using Base = SendAwaiterBase<RefSendAwaiter<Container>>;
 			Container& mContainer;
 
-			span<u8> asSpan() override
-			{
-				return ::coproto::internal::asSpan(mContainer);
-			}
-
-			void setError(std::exception_ptr e) override
-			{
-				mExPtr = e;
-			}
-
-			RefSendProto(SockScheduler* s, SessionID id, Container& t, macoro::stop_token&& token)
-				: SendProtoBase(s, id, std::move(token))
+			RefSendAwaiter(SockScheduler* s, SessionID id, Container& t, macoro::stop_token&& token)
+				: Base(s, id, std::move(token))
 				, mContainer(t)
 			{
 #ifdef COPROTO_LOGGING
@@ -216,30 +279,39 @@ namespace coproto
 #endif
 			}
 
-			SendBuffer getBuffer() override final
+			RefSendAwaiter(RefSendAwaiter&& m)
+				: Base(std::move((Base&)m))
+				, mContainer(m.mContainer)
 			{
-				SendBuffer ret;
-				ret.mStorage.setBorrowed(this);
-				//ret.mStorage.emplace<RefSendBuffer<Container>>(mContainer);
-				return ret;
+			}
+
+
+			RefSendBuffer getBuffer()
+			{
+				return RefSendBuffer(mContainer, &this->mExPtr);
 			}
 
 			void await_resume()
 			{
-				if (mExPtr)
-					std::rethrow_exception(mExPtr);
+				if (this->mExPtr)
+				{
+					std::vector<std::source_location> stack;
+					this->get_call_stack(stack);
+					addTraceRethrow(this->mExPtr, stack);
+				}
 			}
 		};
 
 
 		template<typename Container>
-		class MoveSendProto : public SendProtoBase
+		class MoveSendAwaiter final : public SendAwaiterBase<MoveSendAwaiter<Container>>
 		{
 		public:
+			using Base = SendAwaiterBase<MoveSendAwaiter<Container>>;
 			Container mContainer;
 
-			MoveSendProto(SockScheduler* s, SessionID id,  Container&& t, macoro::stop_token&& token)
-				: SendProtoBase(s, id, std::move(token))
+			MoveSendAwaiter(SockScheduler* s, SessionID id, Container&& t, macoro::stop_token&& token)
+				: Base(s, id, std::move(token))
 				, mContainer(std::move(t))
 			{
 #ifdef COPROTO_LOGGING
@@ -247,47 +319,36 @@ namespace coproto
 #endif
 			}
 
-
-			SendBuffer getBuffer() override final
-			{
-				SendBuffer ret;
-				ret.mStorage.emplace<MvSendBuffer<Container>>(std::move(mContainer));
-				return ret;
-			}
-
-			template<typename P>
-			coroutine_handle<> await_suspend(const coroutine_handle<P>&h)
-			{
-				
-				if (internal::asSpan(mContainer).size() == 0)
-				{
-					mExPtr = std::make_exception_ptr(std::system_error(code::sendLengthZeroMsg));
-					return h;
-				}
-				else
-				{
-					return mSock->send(mId, getBuffer(), h, std::move(mToken), true);
-				}
-			}
-
 #ifdef COPROTO_CPP20
-			template<typename P>
-			std::coroutine_handle<> await_suspend(const std::coroutine_handle<P>& h)
+			template<typename promise>
+			std::coroutine_handle<> await_suspend(std::coroutine_handle<promise> h, std::source_location loc = std::source_location::current())
 			{
-				return await_suspend(static_cast<coroutine_handle<>>(h)).std_cast();
+				this->mSock->send(this->mId, getBuffer(), macoro::noop_coroutine(), std::move(this->mToken)).resume();
+				return h;
 			}
 #endif
-
-
-			void await_resume()
+			template<typename promise>
+			coroutine_handle<> await_suspend(coroutine_handle<promise> h, std::source_location loc = std::source_location::current())
 			{
-				if (mExPtr)
-					std::rethrow_exception(mExPtr);
+				this->mSock->send(this->mId, getBuffer(), macoro::noop_coroutine(), std::move(this->mToken)).resume();
+				return h;
+			}
+
+
+			MoveSendAwaiter(MoveSendAwaiter&& m)
+				: Base(std::move((Base&)m))
+				, mContainer(std::move(m.mContainer))
+			{
+			}
+
+			MvSendBuffer<Container> getBuffer()
+			{
+				return MvSendBuffer<Container>(std::move(mContainer), &this->mExPtr);
 			}
 		};
 
 
-		class Flush
+		class Flush final : macoro::basic_traceable
 		{
 		public:
 			SockScheduler* mSock;
@@ -296,13 +357,18 @@ namespace coproto
 			{}
 
 			bool await_ready() { return false; }
-			coroutine_handle<> await_suspend(coroutine_handle<> h)
+
+			template<typename promise>
+			coroutine_handle<> await_suspend(coroutine_handle<promise> h, std::source_location loc = std::source_location::current())
 			{
+				set_parent(macoro::detail::get_traceable(h), loc);
 				return mSock->flush(h);
 			}
 #ifdef MACORO_CPP_20
-			std::coroutine_handle<> await_suspend(std::coroutine_handle<> h)
+			template<typename promise>
+			std::coroutine_handle<> await_suspend(std::coroutine_handle<promise> h, std::source_location loc = std::source_location::current())
 			{
+				set_parent(macoro::detail::get_traceable(h), loc);
 				auto h2 = coroutine_handle<>(h);
 				auto f = mSock->flush(h2);
 				return f.std_cast();
@@ -310,28 +376,6 @@ namespace coproto
 #endif
 			void await_resume() {};
 		};
-
-
-#ifdef COPROTO_CPP20
-		inline std::coroutine_handle<> SendProtoBase::await_suspend(std::coroutine_handle<> h)
-		{
-			return mSock->send(mId, getBuffer(), coroutine_handle<>(h), std::move(mToken)).std_cast();
-		}
-#endif
-		inline coroutine_handle<> SendProtoBase::await_suspend(coroutine_handle<> h)
-		{
-			return mSock->send(mId, getBuffer(), h, std::move(mToken));
-		}
-#ifdef COPROTO_CPP20
-		inline std::coroutine_handle<> RecvProtoBase::await_suspend(std::coroutine_handle<> h)
-		{
-			return mSock->recv(mId, this, coroutine_handle<>(h), std::move(mToken)).std_cast();
-		}
-#endif
-		inline coroutine_handle<> RecvProtoBase::await_suspend(coroutine_handle<> h)
-		{
-			return mSock->recv(mId, this, h, std::move(mToken));
-		}
 
 	}
 }

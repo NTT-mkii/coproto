@@ -273,7 +273,9 @@ namespace coproto
     TestCollection testCollection([](TestCollection& t) {
 
         t.add("InlinePolyTest                        ", tests::InlinePolyTest);
-        
+        t.add("Queue_test                            ", tests::Queue_test);
+
+        t.add("LocalAsyncSocket_noop_test            ", tests::LocalAsyncSocket_noop_test);
         t.add("LocalAsyncSocket_sendRecv_test        ", tests::LocalAsyncSocket_sendRecv_test);
         t.add("LocalAsyncSocket_parSendRecv_test     ", tests::LocalAsyncSocket_parSendRecv_test);
         t.add("LocalAsyncSocket_cancellation_test    ", tests::LocalAsyncSocket_cancellation_test);
@@ -335,11 +337,11 @@ namespace coproto
         t.add("task_nestedProtocol_ErrorCode_Test    ", tests::task_nestedProtocol_ErrorCode_Test);
         t.add("task_asyncProtocol_Test               ", tests::task_asyncProtocol_Test);
         t.add("task_asyncProtocol_Throw_Test         ", tests::task_asyncProtocol_Throw_Test);
-        t.add("task_endOfRound_Test                  ", tests::task_endOfRound_Test);
         t.add("task_errorSocket_Test                 ", tests::task_errorSocket_Test);
         t.add("task_cancel_send_test                 ", tests::task_cancel_send_test);
         t.add("task_cancel_recv_test                 ", tests::task_cancel_recv_test);
-
+        t.add("task_destroySelf_test                 ", tests::task_destroySelf_test);
+        
         t.add("task14_proto_test                     ", tests::task14_proto_test);
         t.add("task14_strSendRecv_Test               ", tests::task14_strSendRecv_Test);
         t.add("task14_resultSendRecv_Test            ", tests::task14_resultSendRecv_Test);
@@ -355,7 +357,6 @@ namespace coproto
         t.add("task14_nestedProtocol_ErrorCode_Test  ", tests::task14_nestedProtocol_ErrorCode_Test);
         t.add("task14_asyncProtocol_Test             ", tests::task14_asyncProtocol_Test);
         t.add("task14_asyncProtocol_Throw_Test       ", tests::task14_asyncProtocol_Throw_Test);
-        t.add("task14_endOfRound_Test                ", tests::task14_endOfRound_Test);
         t.add("task14_errorSocket_Test               ", tests::task14_errorSocket_Test);
         t.add("task14_cancel_send_test               ", tests::task14_cancel_send_test);
         t.add("task14_cancel_recv_test               ", tests::task14_cancel_recv_test);

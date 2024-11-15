@@ -1,7 +1,8 @@
-cmake_policy(PUSH)
-cmake_policy(SET CMP0057 NEW)
-cmake_policy(SET CMP0045 NEW)
-cmake_policy(SET CMP0074 NEW)
+#cmake_policy(PUSH)
+#cmake_policy(SET CMP0057 NEW)
+#cmake_policy(SET CMP0045 NEW)
+#cmake_policy(SET CMP0074 NEW)
+include_guard(GLOBAL)
 
 
 
@@ -74,17 +75,17 @@ macro(FIND_MACORO)
         set(macoro_options ${macoro_options} ${COPROTO_BUILD_TYPE} )
     endif()
 
+    if(NOT COPROTO_FIND_QUIETLY)
+        message("find_package(macoro ${ARGS} COMPONENTS ${macoro_options}) @ ${CMAKE_CURRENT_LIST_FILE}")
+    endif()
     find_package(macoro ${ARGS} COMPONENTS ${macoro_options})
-
 endmacro()
 
 if((COPROTO_FETCH_AUTO OR COPROTO_FETCH_MACORO) AND COPROTO_BUILD)
-    if(NOT COPROTO_FETCH_MACORO)
-        FIND_MACORO(QUIET)
-    endif()
     include("${CMAKE_CURRENT_LIST_DIR}/../thirdparty/getMacoro.cmake")
+else()
+    FIND_MACORO(REQUIRED)
 endif()
-FIND_MACORO(REQUIRED)
 
 
 ## function2
@@ -141,7 +142,7 @@ if(COPROTO_ENABLE_BOOST)
             option(Boost_LIB_PREFIX "Boost_LIB_PREFIX" "lib")
         endif()
         #set(Boost_DEBUG ON)  #<---------- Real life saver
-
+        
         find_package(Boost 1.84.0 COMPONENTS system thread regex ${ARGS} ${COPROTO_FIND_PACKAGE_OPTIONS})
     endmacro()
 
@@ -162,8 +163,8 @@ if(COPROTO_ENABLE_BOOST)
         message(FATAL_ERROR "Failed to find boost 1.84. When building coproto, add -DCOPROTO_FETCH_BOOST=ON or -DCOPROTO_FETCH_AUTO=ON to auto download.")
     endif()
 
-    message(STATUS "\n\nBoost_LIB: ${Boost_LIBRARIES}" )
-    message(STATUS "Boost_INC: ${Boost_INCLUDE_DIR}\n\n" )
+    message("\n\nBoost_LIB: ${Boost_LIBRARIES}" )
+    message("Boost_INC: ${Boost_INCLUDE_DIR}\n\n" )
 endif()
 
 
@@ -184,6 +185,6 @@ endif()
 
 # resort the previous prefix path
 set(CMAKE_PREFIX_PATH ${PUSHED_CMAKE_PREFIX_PATH})
-cmake_policy(POP)
+#cmake_policy(POP)
 
 find_package(Threads REQUIRED)
