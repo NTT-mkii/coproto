@@ -9,12 +9,12 @@
 
 #include "coproto/config.h"
 #ifdef COPROTO_ENABLE_BOOST
-#include "coproto/Socket/Socket.h"
-#include "coproto/Common/Optional.h"
-#include "coproto/Common/macoro.h"
-#include <boost/asio.hpp>
+#   include "coproto/Socket/Socket.h"
+#   include "coproto/Common/Optional.h"
+#   include "coproto/Common/macoro.h"
+#   include <boost/asio.hpp>
 #ifdef COPROTO_ENABLE_OPENSSL
-#include <boost/asio/ssl.hpp>
+#   include <boost/asio/ssl.hpp>
 #endif
 
 #include <mutex>
@@ -22,9 +22,9 @@
 #include <vector>
 
 #ifndef NDEBUG
+#   define COPROTO_ASIO_LOG
+#   define COPROTO_ASIO_DEBUG
 #endif
-	#define COPROTO_ASIO_LOG
-	#define COPROTO_ASIO_DEBUG
 
 namespace coproto
 {
@@ -144,7 +144,7 @@ namespace coproto
 			{
 				return { new Lock(this) };
 			}
-#else
+#else // ifdef COPROTO_ASIO_DEBUG
 			struct Lock
 			{
 				void reset() {}
@@ -162,7 +162,7 @@ namespace coproto
 			{
 				return {};
 			}
-#endif
+#endif // ifdef COPROTO_ASIO_DEBUG
 		};
 
 		template<typename SocketType = boost::asio::ip::tcp::socket>
@@ -1459,7 +1459,7 @@ namespace coproto
 		return asioConnect(ip, server, global_io_context());
 	}
 
-}
+} // namespace coproto
 
-#endif
+#endif // COPROTO_ASIO_SOCKET_H
 
